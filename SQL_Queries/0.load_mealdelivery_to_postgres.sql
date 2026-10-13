@@ -1,5 +1,5 @@
 /*
-Block 3: create the delivery schema and load the three CSVs.
+Chapter 2: create the delivery schema and load the three CSVs.
 
 Run from the repo root (PowerShell):
     $env:DATABASE_URL = ((Get-Content .env | Select-String '^DATABASE_URL=') -replace '^DATABASE_URL=', '')

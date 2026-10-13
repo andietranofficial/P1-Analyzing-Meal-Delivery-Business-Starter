@@ -15,17 +15,17 @@ CSV files  ──►  PostgreSQL on Neon (schema: delivery)  ──►  SQL anal
 
 ## How to start
 
-Follow the course videos block by block, starting with Block 0 (project setup).
+Follow the course videos.
 
 ## Repository layout
 
-| Folder / file | What goes in it |
-|---|---|
-| `Datasets/` | The three CSVs (download them yourself, they are gitignored) |
-| `SQL_Queries/` | Your load script and analysis queries (scaffolds provided) |
-| `Dashboards/` | Report wireframe, then your `.pbix` and screenshots |
-| `.env.example` | Template for your database connection string |
+| Folder / file  | What goes in it                                              |
+| -------------- | ------------------------------------------------------------ |
+| `Datasets/`    | The three CSVs (download them yourself, they are gitignored) |
+| `SQL_Queries/` | Your load script and analysis queries (scaffolds provided)   |
+| `Dashboards/`  | Report wireframe, then your `.pbix` and screenshots          |
+| `.env.example` | Template for your database connection string                 |
 
 ---
 
-_When you finish, replace this README with your own write-up: architecture, data dictionary, approach, tech stack, how to run, dashboard screenshots and key insights (see Block 9)._
+_When you finish, replace this README with your own write-up: architecture, data dictionary, approach, tech stack, how to run, dashboard screenshots and key insights (see Chapter 9)._
