@@ -1,0 +1,17 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Secrets: your real connection string lives in .env (copy it from .env.example)
+.env
+
+# Data: download the CSVs yourself (see Datasets/README.md)
+Datasets/*
+!Datasets/README.md
+
+# Logs
+*.log

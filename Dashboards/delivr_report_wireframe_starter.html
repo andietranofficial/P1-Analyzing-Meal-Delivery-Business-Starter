@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Delivr Interactive Wireframe</title>
+<!--
+  Interactive version of delivr_report_wireframe.html (modified 2026-10-02).
+  Adds: tooltips, hover highlight, click-to-select cross-filtering (Ctrl/Shift+click = multi),
+  multi-select slicers with search, reset, and month slicer synced across pages.
+  All numbers are generated PLACEHOLDER data, not Delivr figures.
+  Profit = Revenue − cost of meals sold (meal_cost × order_quantity).
+-->
+<style>
+  :root {
+    --bg: #e9e9e6;
+    --canvas: #ffffff;
+    --ink: #2b2b2b;
+    --muted: #7a7a7a;
+    --line: #c9c9c4;
+    --fill: #dcdcd7;
+    --fill-2: #b9b9b3;
+    --fill-3: #8e8e88;
+    --accent: #2f6fdf;
+    --accent-soft: #eef3fd;
+    --up: #2e7d32;
+    --down: #c62828;
+    --note-bg: #fff6d6;
+    --note-ink: #6b5400;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 14px/1.35 "Segoe UI", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+
+  /* ---------- toolbar (not part of the report) ---------- */
+  .toolbar {
+    height: 48px; display: flex; align-items: center; gap: 8px;
+    padding: 0 16px; background: #2b2b2b; color: #fff;
+  }
+  .toolbar strong { margin-right: 16px; font-weight: 600; }
+  .toolbar button {
+    font: inherit; color: #ddd; background: transparent; border: 1px solid #555;
+    border-radius: 4px; padding: 6px 12px; cursor: pointer;
+  }
+  .toolbar button[aria-pressed="true"] { background: #fff; color: #2b2b2b; border-color: #fff; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .dim { color: #999; font-size: 12px; }
+
+  /* ---------- scaled 1920x1080 stage ---------- */
+  .stage { position: relative; height: calc(100vh - 48px); }
+  .page {
+    position: absolute; top: 0; left: 0;
+    width: 1920px; height: 1080px;
+    transform-origin: top left;
+    background: var(--canvas);
+    box-shadow: 0 2px 16px rgba(0,0,0,.15);
+    display: none;
+    padding: 24px;
+    gap: 20px;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-rows: 72px 150px minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .page.active { display: grid; }
+
+  /* ---------- header ---------- */
+  .header {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 16px;
+    border-bottom: 2px solid var(--ink); padding-bottom: 12px; position: relative; z-index: 5;
+  }
+  .logo {
+    width: 56px; height: 56px; border: 2px dashed var(--fill-3); border-radius: 8px;
+    display: grid; place-items: center; color: var(--muted); font-size: 11px; flex: none;
+  }
+  .title h1 { margin: 0; font-size: 30px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+  .title p { margin: 2px 0 0; color: var(--muted); font-size: 15px; white-space: nowrap; }
+
+  .selpill {
+    display: none; align-items: center; gap: 8px; padding: 6px 6px 6px 12px;
+    background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent);
+    border-radius: 999px; font-size: 13px; white-space: nowrap;
+  }
+  .selpill.show { display: inline-flex; }
+  .selpill button {
+    border: 0; background: var(--accent); color: #fff; width: 22px; height: 22px; border-radius: 50%;
+    cursor: pointer; font-size: 12px; line-height: 1;
+  }
+
+  .slicers { margin-left: auto; display: flex; gap: 12px; }
+  .slicer {
+    width: 220px; height: 52px; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 30px 6px 12px; display: flex; flex-direction: column; justify-content: center;
+    position: relative; cursor: pointer; user-select: none; background: #fff;
+  }
+  .slicer:hover { border-color: var(--fill-3); }
+  .slicer.filtered { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+  .slicer small { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .slicer .sv { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slicer::after {
+    content: "▾"; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); color: var(--muted);
+  }
+  .panel {
+    position: absolute; top: calc(100% + 6px); left: 0; width: 280px; max-height: 420px;
+    background: #fff; border: 1px solid var(--line); border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.15); padding: 10px; cursor: default;
+    display: flex; flex-direction: column; gap: 6px; z-index: 20;
+  }
+  .panel[hidden] { display: none; }
+  .panel input.search {
+    font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; width: 100%;
+  }
+  .panel label { display: flex; align-items: center; gap: 8px; padding: 4px 4px; border-radius: 4px; cursor: pointer; }
+  .panel label:hover { background: #f4f4f2; }
+  .panel .all { border-bottom: 1px solid #eee; padding-bottom: 8px; font-weight: 600; }
+  .panel .opts { overflow: auto; }
+  .panel input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; }
+
+  .hbtn {
+    font: inherit; font-size: 13px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; color: var(--ink); cursor: pointer; white-space: nowrap;
+  }
+  .hbtn:hover { border-color: var(--fill-3); }
+  .navbtns { display: flex; gap: 6px; }
+  .navbtns button {
+    font: inherit; padding: 14px 18px; border: 1px solid var(--line); border-radius: 6px; font-size: 14px;
+    color: var(--muted); background: #fff; cursor: pointer;
+  }
+  .navbtns button.on { background: var(--ink); color: #fff; border-color: var(--ink); cursor: default; }
+
+  /* ---------- KPI cards ---------- */
+  .kpis { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 20px; }
+  .kpi {
+    border: 1px solid var(--line); border-radius: 8px; padding: 18px 22px; cursor: help;
+    display: flex; flex-direction: column; justify-content: space-between; position: relative;
+  }
+  .kpi:hover { border-color: var(--fill-3); }
+  .kpi .label { color: var(--muted); font-size: 14px; text-transform: uppercase; letter-spacing: .05em; }
+  .kpi .value { font-size: 44px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .kpi .sub { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .kpi .sub svg { width: 110px; height: 28px; flex: none; }
+  .d.up { color: var(--up); }
+  .d.down { color: var(--down); }
+
+  /* ---------- visuals ---------- */
+  .visual {
+    border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px 12px;
+    display: flex; flex-direction: column; min-height: 0; min-width: 0; position: relative;
+  }
+  .visual h2 { margin: 0; font-size: 18px; font-weight: 600; }
+  .visual .vsub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .visual .body { flex: 1; min-height: 0; margin-top: 10px; position: relative; }
+  .visual .body > svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .visual .body.scroll { overflow: auto; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .legend i.ln { height: 3px; vertical-align: 3px; }
+
+  /* chart marks */
+  svg .grid { stroke: #e6e6e2; stroke-dasharray: 3 4; }
+  svg .zero { stroke: var(--fill-3); }
+  svg .tick { font-size: 12px; fill: #8a8a8a; }
+  svg .val { font-size: 12px; fill: var(--muted); }
+  svg .lab { font-size: 13px; fill: var(--ink); }
+  svg .ln { fill: none; stroke-width: 2.5; }
+  svg .hit { fill: transparent; }
+  svg .empty { font-size: 15px; fill: var(--muted); }
+  .ix { cursor: pointer; }
+  .ix .m { transition: opacity .12s; }
+  .ix.hovering .cat:not(.hot) .m,
+  .ix.hovering .cat:not(.hot) .lab { opacity: .35; }
+  .cat.dim .m, .cat.dim .lab { opacity: .2; }
+  .cat.hot .m { filter: brightness(.82); }
+  .cat.hot .hit { fill: rgba(47,111,223,.06); }
+  .cat.on rect.m { stroke: var(--accent); stroke-width: 2; }
+  .cat.on circle.m { stroke: var(--accent); }
+  .cat.on .lab { fill: var(--accent); font-weight: 600; }
+
+  /* tables */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  .tbl th {
+    text-align: left; font-weight: 600; color: var(--muted); border-bottom: 2px solid var(--line);
+    padding: 7px 6px; position: sticky; top: 0; background: #fff;
+  }
+  .tbl th.r, .tbl td.r { text-align: right; }
+  .tbl td { border-bottom: 1px solid #eee; padding: 7px 6px; }
+  .tbl td .bar { display: inline-block; height: 10px; background: var(--fill-2); border-radius: 2px; vertical-align: middle; }
+  .tbl tr.cat td { transition: opacity .12s; }
+  .ix.hovering tr.cat:not(.hot) td { opacity: .45; }
+  .tbl tr.cat.hot td { background: var(--accent-soft); }
+  .tbl tr.cat.dim td { opacity: .3; }
+  .tbl tr.cat.on td { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .tbl tr.cat.on td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .pos { color: var(--up); } .neg { color: var(--down); }
+
+  /* ---------- tooltip ---------- */
+  #tip {
+    position: fixed; z-index: 100; pointer-events: none; display: none;
+    background: #1f1f1f; color: #fff; border-radius: 6px; padding: 10px 12px;
+    font-size: 13px; min-width: 180px; max-width: 320px; box-shadow: 0 6px 18px rgba(0,0,0,.25);
+  }
+  #tip .h { font-weight: 600; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid #444; }
+  #tip .row { display: flex; justify-content: space-between; gap: 18px; padding: 1px 0; }
+  #tip .row span:first-child { color: #bbb; }
+  #tip .row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  #tip i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+  #tip .hint { color: #999; font-size: 11px; margin-top: 6px; }
+  #tip p { margin: 0; color: #ddd; }
+
+  /* ---------- annotations ---------- */
+  .note {
+    position: absolute; right: 10px; top: 10px; max-width: 58%; pointer-events: none;
+    background: var(--note-bg); color: var(--note-ink); border: 1px solid #ecd98c;
+    border-radius: 4px; padding: 4px 8px; font-size: 11px; line-height: 1.35;
+    font-family: Consolas, "Cascadia Mono", monospace; z-index: 2;
+  }
+  .kpi .note {
+    position: static; order: -1; align-self: flex-start; max-width: 100%;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: -6px 0 4px -8px; padding: 2px 6px;
+  }
+  body:not(.hide-notes) .kpi .value { font-size: 38px; }
+  .note.todo { background: #ffe3e0; color: #8a1f11; border-color: #f2b8b0; }
+  body.hide-notes .note { display: none; }
+
+  .footer-note { position: absolute; bottom: 4px; left: 24px; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <strong>Delivr · Power BI wireframe (interactive)</strong>
+  <button data-go="p1" aria-pressed="true">1 · Business Performance</button>
+  <button data-go="p2" aria-pressed="false">2 · User Behaviour</button>
+  <span class="spacer"></span>
+  <span class="dim">Hover = tooltip · Click = cross-filter · Ctrl/Shift+click = multi-select · Click blank = clear</span>
+  <button id="toggleNotes" aria-pressed="true">Annotations</button>
+</div>
+
+<div class="stage" id="stage">
+
+<!-- ============================================================
+     PAGE 1 — BUSINESS PERFORMANCE (1.analyze_performance.sql)
+     ============================================================ -->
+<section class="page active" id="p1" aria-label="Business performance">
+
+  <div class="header">
+    <div class="logo">LOGO</div>
+    <div class="title">
+      <h1>Business Performance</h1>
+      <p>Revenue, cost and profit · Delivr</p>
+    </div>
+    <div class="selpill" id="pill1">Selected: <b></b><button title="Clear selection">✕</button></div>
+    <div class="slicers">
+      <div class="slicer" id="s1-month"><small>Month</small><span class="sv">All</span></div>
+      <div class="slicer" id="s1-eatery"><small>Eatery</small><span class="sv">All</span></div>
+      <div class="slicer" id="s1-meal"><small>Meal ID</small><span class="sv">All</span></div>
+    </div>
+    <button class="hbtn" data-reset="p1">↺ Reset filters</button>
+    <div class="navbtns"><button class="on">Performance</button><button data-go="p2">Users</button></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi" id="k-rev" data-tip="Total Revenue|SUM(meal_price × order_quantity) over filtered orders. Change compares the last two months in context.">
+      <div class="label">Total Revenue</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">SUM(meal_price × order_quantity) · §1</div>
+    </div>
+    <div class="kpi" id="k-cogs" data-tip="Cost of Meals Sold|SUM(meal_cost × order_quantity). Used for profit so cost lines up with the meals actually sold.">
+      <div class="label">Cost of Meals Sold</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">SUM(meal_cost × order_quantity)</div>
+    </div>
+    <div class="kpi" id="k-profit" data-tip="Total Profit|Revenue − Cost of meals sold.">
+      <div class="label">Total Profit</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note todo">Revenue − COGS · PROFIT section still empty in SQL</div>
+    </div>
+    <div class="kpi" id="k-margin" data-tip="Profit Margin|Profit ÷ Revenue. Change is in percentage points.">
+      <div class="label">Profit Margin</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note todo">DAX measure, depends on Profit</div>
+    </div>
+    <div class="kpi" id="k-avg" data-tip="Avg Monthly Stock Cost|AVG of monthly SUM(meal_cost × stocked_quantity) for months before Sep 2018 (stock table).">
+      <div class="label">Avg Monthly Stock Cost</div><div class="value"></div>
+      <div class="sub"><span class="d">Months before Sep 2018</span><svg class="spark"></svg></div>
+      <div class="note">monthly_cost CTE → AVG(cost) · §5</div>
+    </div>
+  </div>
+
+  <div class="visual" style="grid-column: 1 / span 8;">
+    <h2>Monthly Revenue, Cost &amp; Profit</h2>
+    <div class="vsub">Clustered columns (Revenue, Cost) + line (Profit) · click a month to cross-filter</div>
+    <div class="body ix" id="v-monthly"><svg></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--fill-2)"></i>Revenue</span>
+      <span><i style="background:var(--fill)"></i>Cost of meals sold</span>
+      <span><i class="ln" style="background:var(--ink)"></i>Profit</span>
+    </div>
+    <div class="note">DATEFROMPARTS month · Revenue §1 · Cost = meal_cost × order_quantity</div>
+  </div>
+
+  <div class="visual" style="grid-column: 9 / span 4;">
+    <h2>Top 5 Meals by Stock Cost</h2>
+    <div class="vsub">Horizontal bar · stock data (ignores customer selection)</div>
+    <div class="body ix" id="v-top5"><svg></svg></div>
+    <div class="note">TOP 5 meal_id ORDER BY cost DESC · §4</div>
+  </div>
+
+  <div class="visual" style="grid-column: 1 / span 4;">
+    <h2>Weekly Revenue</h2>
+    <div class="vsub">Weeks within filtered months · pick one month to zoom in</div>
+    <div class="body ix" id="v-weekly"><svg></svg></div>
+    <div class="note todo">§3 still PostgreSQL (DATE_TRUNC) · port to T-SQL</div>
+  </div>
+
+  <div class="visual" style="grid-column: 5 / span 4;">
+    <h2>Revenue vs Cost by Eatery</h2>
+    <div class="vsub">Clustered horizontal bar, by meals.eatery</div>
+    <div class="body ix" id="v-eatery"><svg></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--fill-2)"></i>Revenue</span>
+      <span><i style="background:var(--fill)"></i>Cost of meals sold</span>
+    </div>
+    <div class="note">Same measures sliced by meals.eatery</div>
+  </div>
+
+  <div class="visual" style="grid-column: 9 / span 4;">
+    <h2>Top Customers by Revenue</h2>
+    <div class="vsub">Table with data bars · click a row to filter the page</div>
+    <div class="body ix scroll" id="v-cust"></div>
+    <div class="note">revenue per user_id · §2 (generalised from user 15)</div>
+  </div>
+
+  <div class="footer-note">PLACEHOLDER DATA, not real Delivr figures · Source tables: delivery.meals · delivery.orders · delivery.stock</div>
+</section>
+
+<!-- ============================================================
+     PAGE 2 — USER BEHAVIOUR (2.analyze_user.sql)
+     ============================================================ -->
+<section class="page" id="p2" aria-label="User behaviour">
+
+  <div class="header">
+    <div class="logo">LOGO</div>
+    <div class="title">
+      <h1>User Behaviour</h1>
+      <p>Registrations, active users, growth &amp; retention · Delivr</p>
+    </div>
+    <div class="selpill" id="pill2">Selected: <b></b><button title="Clear selection">✕</button></div>
+    <div class="slicers">
+      <div class="slicer" id="s2-month"><small>Month (synced)</small><span class="sv">All</span></div>
+      <div class="slicer" id="s2-cohort"><small>Registration cohort</small><span class="sv">All</span></div>
+    </div>
+    <button class="hbtn" data-reset="p2">↺ Reset filters</button>
+    <div class="navbtns"><button data-go="p1">Performance</button><button class="on">Users</button></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi" id="k-rt" data-tip="Registered Users|Running total of registrations up to the focus month: SUM(regs) OVER (ORDER BY delivr_month).">
+      <div class="label">Registered Users</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">regs_rt · §4</div>
+    </div>
+    <div class="kpi" id="k-regs" data-tip="New Registrations|Users whose first order_date falls in the focus month.">
+      <div class="label">New Registrations</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">regs · §2 (reg_date = first order)</div>
+    </div>
+    <div class="kpi" id="k-mau" data-tip="Monthly Active Users|COUNT(DISTINCT user_id) ordering in the focus month; change vs LAG(mau).">
+      <div class="label">Monthly Active Users</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">mau, mau_delta · §3, §5</div>
+    </div>
+    <div class="kpi" id="k-mg" data-tip="MAU Growth (MoM)|(mau − last_mau) ÷ last_mau × 100. Blank for the first month (NULLIF).">
+      <div class="label">MAU Growth (MoM)</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">growth · §6</div>
+    </div>
+    <div class="kpi" id="k-og" data-tip="Order Growth (MoM)|(orders − last_orders) ÷ last_orders × 100, distinct order_id per month.">
+      <div class="label">Order Growth (MoM)</div><div class="value"></div>
+      <div class="sub"><span class="d"></span><svg class="spark"></svg></div>
+      <div class="note">growth · §7</div>
+    </div>
+  </div>
+
+  <div class="visual" style="grid-column: 1 / span 7;">
+    <h2>Registrations per Month &amp; Running Total</h2>
+    <div class="vsub">Columns = new registrations · line (right axis) = cumulative users</div>
+    <div class="body ix" id="v-regs"><svg></svg></div>
+    <div class="legend">
+      <span><i style="background:var(--fill-2)"></i>regs</span>
+      <span><i class="ln" style="background:var(--ink)"></i>regs_rt</span>
+    </div>
+    <div class="note">SUM(regs) OVER (ORDER BY delivr_month) · §2 + §4</div>
+  </div>
+
+  <div class="visual" style="grid-column: 8 / span 5;">
+    <h2>MAU: Current vs Last Month</h2>
+    <div class="vsub">mau vs last_mau (LAG) by month</div>
+    <div class="body ix" id="v-mau"><svg></svg></div>
+    <div class="legend">
+      <span><i class="ln" style="background:var(--ink)"></i>mau</span>
+      <span><i class="ln" style="background:var(--fill-3)"></i>last_mau (dashed)</span>
+    </div>
+    <div class="note">LAG(mau) OVER (ORDER BY delivr_month) · §3 + §5</div>
+  </div>
+
+  <div class="visual" style="grid-column: 1 / span 4;">
+    <h2>MAU Change (Δ) by Month</h2>
+    <div class="vsub">Gains dark, losses light</div>
+    <div class="body ix" id="v-delta"><svg></svg></div>
+    <div class="note">mau − last_mau AS mau_delta · §5</div>
+  </div>
+
+  <div class="visual" style="grid-column: 5 / span 4;">
+    <h2>Growth Rate: MAU vs Orders</h2>
+    <div class="vsub">% month over month</div>
+    <div class="body ix" id="v-growth"><svg></svg></div>
+    <div class="legend">
+      <span><i class="ln" style="background:var(--ink)"></i>MAU growth %</span>
+      <span><i class="ln" style="background:var(--fill-3)"></i>Order growth % (dashed)</span>
+    </div>
+    <div class="note">§6 growth vs §7 growth</div>
+  </div>
+
+  <div class="visual" style="grid-column: 9 / span 4;">
+    <h2>Monthly Growth Detail</h2>
+    <div class="vsub">Matrix with conditional formatting on growth</div>
+    <div class="body ix scroll" id="v-detail"></div>
+    <div class="note">§6 + §7 joined on delivr_month</div>
+  </div>
+
+  <div class="footer-note">PLACEHOLDER DATA, not real Delivr figures · Registration date = user's first order_date · months bucketed with DATEFROMPARTS(YEAR, MONTH, 1) · window functions run over all months, then the month filter is applied</div>
+</section>
+
+</div>
+
+<div id="tip"></div>
+
+<script>
+/* =================================================================
+   1. PLACEHOLDER DATA (deterministic, generated at the same grain as
+      delivery.meals / delivery.orders / delivery.stock)
+   ================================================================= */
+let seed = 20181;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
+
+const MONTHS = Array.from({ length: 12 }, (_, i) => {
+  const d = new Date(2018, 5 + i, 1);
+  return { key: i, label: d.toLocaleString('en', { month: 'short' }) + ' ' + String(d.getFullYear()).slice(2) };
+});
+const EATERIES = ['A', 'B', 'C', 'D', 'E', 'F'].map((c, i) => ({ key: i, label: 'Eatery ' + c }));
+const MEALS = Array.from({ length: 18 }, (_, i) => {
+  const price = 3 + ri(0, 10) * 0.5;
+  return { key: i, e: Math.floor(i / 3), price, cost: Math.round(price * (0.35 + rnd() * 0.25) * 4) / 4,
+           label: 'Meal ' + String(i).padStart(2, '0') };
+});
+
+const N_USERS = 420, REG = [], ORDERS = [];
+let orderId = 0;
+for (let u = 0; u < N_USERS; u++) {
+  const reg = Math.min(11, Math.floor(12 * Math.pow(rnd(), 0.7)));
+  const fav = ri(0, 5);
+  REG.push(reg);
+  for (let m = reg; m < 12; m++) {
+    if (m !== reg && rnd() > 0.6 * Math.pow(0.94, m - reg)) continue;
+    for (let k = ri(1, 3); k > 0; k--) {
+      const o = orderId++, w = ri(0, 3);
+      for (let l = ri(1, 2); l > 0; l--) {
+        const meal = rnd() < 0.5 ? fav * 3 + ri(0, 2) : ri(0, 17);
+        ORDERS.push({ o, u, m, w, wk: m * 4 + w, meal, e: MEALS[meal].e, q: ri(1, 3) });
+      }
+    }
+  }
+}
+const STOCK = [];
+for (let m = 0; m < 12; m++) for (const meal of MEALS) {
+  const sold = ORDERS.reduce((s, r) => s + (r.m === m && r.meal === meal.key ? r.q : 0), 0);
+  STOCK.push({ m, meal: meal.key, e: meal.e, q: Math.round(sold * (1.05 + rnd() * 0.45)) + ri(2, 8) });
+}
+
+const rev = r => MEALS[r.meal].price * r.q;
+const cogs = r => MEALS[r.meal].cost * r.q;
+const stockCost = r => MEALS[r.meal].cost * r.q;
+const sum = (rows, f) => rows.reduce((s, r) => s + f(r), 0);
+function groupSum(rows, keyFn, valFn) {
+  const m = new Map();
+  for (const r of rows) { const k = keyFn(r); m.set(k, (m.get(k) || 0) + valFn(r)); }
+  return m;
+}
+
+/* =================================================================
+   2. FORMATTING + TOOLTIP
+   ================================================================= */
+const money = v => (v < 0 ? '−' : '') + '$' + (Math.abs(v) >= 1000 ? (Math.abs(v) / 1000).toFixed(1) + 'K' : Math.abs(v).toFixed(0));
+const moneyAxis = v => '$' + (Math.abs(v) >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + 'K' : v.toFixed(0));
+const int = v => Math.round(v).toLocaleString('en');
+const pct = v => v == null ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + int(Math.abs(v));
+const C = { ink: '#2b2b2b', f1: '#dcdcd7', f2: '#b9b9b3', f3: '#8e8e88', dark: '#6e6e68', light: '#d4d4ce' };
+
+const tipEl = document.getElementById('tip');
+function tipHTML(title, rows, hint) {
+  return `<div class="h">${title}</div>` +
+    rows.map(([k, v, c]) => `<div class="row"><span>${c ? `<i style="background:${c}"></i>` : ''}${k}</span><b>${v}</b></div>`).join('') +
+    (hint ? `<div class="hint">${hint}</div>` : '');
+}
+function showTip(html, e) {
+  tipEl.innerHTML = html; tipEl.style.display = 'block';
+  const r = tipEl.getBoundingClientRect(), pad = 14;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + r.width > innerWidth - 4) x = e.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 4) y = e.clientY - r.height - pad;
+  tipEl.style.left = x + 'px'; tipEl.style.top = y + 'px';
+}
+const hideTip = () => { tipEl.style.display = 'none'; };
+
+// KPI cards: static definition tooltips
+document.querySelectorAll('[data-tip]').forEach(el => {
+  const [t, d] = el.dataset.tip.split('|');
+  el.addEventListener('mousemove', e => showTip(`<div class="h">${t}</div><p>${d}</p>`, e));
+  el.addEventListener('mouseleave', hideTip);
+});
+
+/* =================================================================
+   3. CHART PRIMITIVES (SVG, drawn at real pixel size)
+   ================================================================= */
+function niceScale(min, max, ticks = 4) {
+  if (max === min) max = min + 1;
+  const raw = (max - min) / ticks, mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map(x => x * mag).find(s => s >= raw);
+  return { min: Math.floor(min / step) * step, max: Math.ceil(max / step) * step, step };
+}
+const catCls = (key, sel) => 'cat' + (sel && sel.size ? (sel.has(key) ? ' on' : ' dim') : '');
+const emptySvg = (W, H) => `<text class="empty" x="${W / 2}" y="${H / 2}" text-anchor="middle">No data for current filters</text>`;
+
+/* Vertical category chart: clustered bars + lines (optional right axis). */
+function xyChart(host, o) {
+  const svg = host.querySelector('svg'), W = host.clientWidth, H = host.clientHeight;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  if (!o.cats.length) { svg.innerHTML = emptySvg(W, H); return; }
+  const lines = o.lines || [], bars = o.bars || [];
+  const hasY2 = lines.some(l => l.axis === 'y2');
+  const m = { l: 58, r: hasY2 ? 58 : 14, t: 12, b: 26 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const v1 = [...bars.flatMap(b => b.vals), ...lines.filter(l => l.axis !== 'y2').flatMap(l => l.vals)].filter(v => v != null);
+  const s1 = niceScale(Math.min(0, ...v1), Math.max(0, ...v1));
+  const y = v => m.t + ih * (1 - (v - s1.min) / (s1.max - s1.min));
+  let s2, y2;
+  if (hasY2) {
+    const v2 = lines.filter(l => l.axis === 'y2').flatMap(l => l.vals).filter(v => v != null);
+    s2 = niceScale(0, Math.max(...v2));
+    y2 = v => m.t + ih * (1 - (v - s2.min) / (s2.max - s2.min));
+  }
+  const n = o.cats.length, band = iw / n, cx = i => m.l + band * (i + 0.5);
+  let s = '';
+  for (let v = s1.min; v <= s1.max + 1e-9; v += s1.step) {
+    s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/>` +
+         `<text class="tick" x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${(o.axisFmt || o.fmt)(v)}</text>`;
+  }
+  if (hasY2) for (let v = s2.min; v <= s2.max + 1e-9; v += s2.step)
+    s += `<text class="tick" x="${W - m.r + 8}" y="${y2(v) + 4}">${(o.axisFmt2 || int)(v)}</text>`;
+  if (s1.min < 0) s += `<line class="zero" x1="${m.l}" x2="${W - m.r}" y1="${y(0)}" y2="${y(0)}"/>`;
+
+  const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(iw / 58))));
+  o.cats.forEach((c, i) => {
+    const lab = 'tick' in c ? c.tick : (i % every ? '' : c.label);
+    if (lab) s += `<text class="tick" x="${cx(i)}" y="${H - 6}" text-anchor="middle">${lab}</text>`;
+  });
+
+  for (const l of lines) {
+    const yy = l.axis === 'y2' ? y2 : y;
+    let d = '', pen = false;
+    l.vals.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + cx(i) + ',' + yy(v); pen = true; });
+    s += `<path class="ln" d="${d}" stroke="${l.color}" ${l.dash ? `stroke-dasharray="${l.dash}"` : ''}/>`;
+  }
+
+  const cw = Math.min(band * 0.72, 90), bw = bars.length ? cw / bars.length : 0;
+  o.cats.forEach((c, i) => {
+    s += `<g class="${catCls(c.key, o.selected)}" data-key="${c.key}">` +
+         `<rect class="hit" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ih}"/>`;
+    bars.forEach((b, j) => {
+      const v = b.vals[i]; if (v == null) return;
+      const x = cx(i) - cw / 2 + bw * j, y0 = y(0), yv = y(v);
+      s += `<rect class="m" x="${x + 0.5}" y="${Math.min(y0, yv)}" width="${Math.max(1, bw - 1)}" height="${Math.max(0.5, Math.abs(y0 - yv))}" rx="2" fill="${b.colorFn ? b.colorFn(v) : b.color}"/>`;
+    });
+    lines.forEach(l => {
+      const v = l.vals[i]; if (v == null || n > 24) return;
+      s += `<circle class="m" cx="${cx(i)}" cy="${(l.axis === 'y2' ? y2 : y)(v)}" r="4" fill="${l.dash ? '#fff' : l.color}" stroke="${l.color}" stroke-width="2"/>`;
+    });
+    s += '</g>';
+  });
+  svg.innerHTML = s;
+}
+
+/* Horizontal bar chart: 1–2 series per category. */
+function hbarChart(host, o) {
+  const svg = host.querySelector('svg'), W = host.clientWidth, H = host.clientHeight;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  if (!o.cats.length) { svg.innerHTML = emptySvg(W, H); return; }
+  const m = { l: 150, r: 64, t: 4, b: 4 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const n = o.cats.length, rowH = Math.min(ih / n, 72), nb = o.bars.length, bh = rowH * 0.66 / nb;
+  const max = Math.max(...o.bars.flatMap(b => b.vals), 1);
+  let s = '';
+  o.cats.forEach((c, i) => {
+    const top = m.t + rowH * i, y0 = top + rowH * 0.17;
+    s += `<g class="${catCls(c.key, o.selected)}" data-key="${c.key}">` +
+         `<rect class="hit" x="0" y="${top}" width="${W}" height="${rowH}"/>` +
+         `<text class="lab" x="${m.l - 12}" y="${top + rowH / 2 + 5}" text-anchor="end">${c.label}</text>`;
+    o.bars.forEach((b, j) => {
+      const w = Math.max(1, iw * b.vals[i] / max);
+      s += `<rect class="m" x="${m.l}" y="${y0 + bh * j}" width="${w}" height="${bh - 2}" rx="2" fill="${b.color}"/>`;
+      if (j === 0) s += `<text class="val m" x="${m.l + w + 6}" y="${y0 + bh * j + bh / 2 + 3}">${o.fmt(b.vals[i])}</text>`;
+    });
+    s += '</g>';
+  });
+  svg.innerHTML = s;
+}
+
+function spark(svg, vals) {
+  svg.setAttribute('viewBox', '0 0 110 28');
+  const v = vals.filter(x => x != null);
+  if (v.length < 2) { svg.innerHTML = ''; return; }
+  const lo = Math.min(...v), hi = Math.max(...v), sx = 104 / (v.length - 1);
+  const pts = v.map((x, i) => [3 + i * sx, 24 - (hi === lo ? 10 : (x - lo) / (hi - lo) * 20)]);
+  svg.innerHTML = `<polyline points="${pts.map(p => p.join(',')).join(' ')}" fill="none" stroke="${C.f3}" stroke-width="2"/>` +
+                  `<circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="3" fill="${C.ink}"/>`;
+}
+
+/* Hover / click wiring. Each host gets ._ix = { tip(key), select(key, additive), clear() } on render. */
+function wire(host) {
+  host.addEventListener('mousemove', e => {
+    const g = e.target.closest('[data-key]');
+    host.querySelectorAll('.hot').forEach(x => x !== g && x.classList.remove('hot'));
+    if (g) { g.classList.add('hot'); host.classList.add('hovering'); showTip(host._ix.tip(+g.dataset.key), e); }
+    else { host.classList.remove('hovering'); hideTip(); }
+  });
+  host.addEventListener('mouseleave', () => {
+    host.classList.remove('hovering'); host.querySelectorAll('.hot').forEach(x => x.classList.remove('hot')); hideTip();
+  });
+  host.addEventListener('click', e => {
+    const g = e.target.closest('[data-key]');
+    hideTip();
+    if (g) host._ix.select(+g.dataset.key, e.ctrlKey || e.metaKey || e.shiftKey);
+    else host._ix.clear();
+  });
+}
+document.querySelectorAll('.ix').forEach(wire);
+
+/* Shared selection toggling (Power BI semantics). */
+function toggleSel(cur, src, dim, key, additive) {
+  if (cur && cur.src === src && cur.dim === dim) {
+    const keys = new Set(cur.keys);
+    if (additive) keys.has(key) ? keys.delete(key) : keys.add(key);
+    else if (keys.size === 1 && keys.has(key)) keys.clear();
+    else { keys.clear(); keys.add(key); }
+    return keys.size ? { src, dim, keys } : null;
+  }
+  return { src, dim, keys: new Set([key]) };
+}
+
+/* =================================================================
+   4. SLICERS (multi-select dropdown, search, select all)
+      Empty Set = "All" (no filter), same as Power BI.
+   ================================================================= */
+const slicers = [];
+function makeSlicer(el, cfg) {
+  const sv = el.querySelector('.sv');
+  const panel = document.createElement('div');
+  panel.className = 'panel'; panel.hidden = true;
+  panel.innerHTML = `<input class="search" placeholder="Search…"><label class="all"><input type="checkbox"> Select all</label><div class="opts"></div>`;
+  el.appendChild(panel);
+  const search = panel.querySelector('.search'), all = panel.querySelector('.all input'), opts = panel.querySelector('.opts');
+  const set = cfg.set();
+
+  function paint() {
+    const list = cfg.options(), q = search.value.toLowerCase();
+    all.checked = set.size === 0;
+    opts.innerHTML = list.filter(o => o.label.toLowerCase().includes(q)).map(o =>
+      `<label><input type="checkbox" data-k="${o.key}" ${set.size === 0 || set.has(o.key) ? 'checked' : ''}> ${o.label}</label>`).join('');
+    sv.textContent = set.size === 0 ? 'All' : set.size === 1 ? list.find(o => set.has(o.key))?.label ?? '1 selected' : set.size + ' selected';
+    el.classList.toggle('filtered', set.size > 0);
+  }
+  el.addEventListener('click', e => {
+    if (panel.contains(e.target)) return;
+    const opening = panel.hidden;
+    slicers.forEach(s => s.close());
+    if (opening) { panel.hidden = false; search.value = ''; paint(); search.focus(); }
+  });
+  all.addEventListener('change', () => { set.clear(); paint(); cfg.onChange(); });
+  opts.addEventListener('change', e => {
+    const k = +e.target.dataset.k, keys = cfg.options().map(o => o.key);
+    if (set.size === 0) keys.forEach(x => x !== k && set.add(x));       // "All" → all but this one
+    else if (e.target.checked) set.add(k);
+    else if (set.size > 1) set.delete(k);                                // never allow "none"
+    if (keys.every(x => set.has(x))) set.clear();
+    paint(); cfg.onChange();
+  });
+  search.addEventListener('input', paint);
+  const api = { paint, close: () => { panel.hidden = true; } };
+  slicers.push(api);
+  return api;
+}
+document.addEventListener('click', e => { if (!e.target.closest('.slicer')) slicers.forEach(s => s.close()); });
+
+/* =================================================================
+   5. PAGE 1 — BUSINESS PERFORMANCE
+   ================================================================= */
+const F = { month: new Set(), eatery: new Set(), meal: new Set(), cohort: new Set() };  // month is synced across pages
+let sel1 = null;
+const DIM_LABEL = {
+  month: k => MONTHS[k].label, week: k => `${MONTHS[Math.floor(k / 4)].label} · Wk ${k % 4 + 1}`,
+  meal: k => MEALS[k].label, eatery: k => EATERIES[k].label, user: k => 'User ' + k,
+};
+
+function pass1(r, src, isStock) {
+  if (F.month.size && !F.month.has(r.m)) return false;
+  if (F.eatery.size && !F.eatery.has(r.e)) return false;
+  if (F.meal.size && !F.meal.has(r.meal)) return false;
+  if (sel1 && sel1.src !== src) {
+    const d = sel1.dim, k = sel1.keys;
+    if (d === 'month') return k.has(r.m);
+    if (d === 'meal') return k.has(r.meal);
+    if (d === 'eatery') return k.has(r.e);
+    if (d === 'week') return isStock ? [...k].some(w => Math.floor(w / 4) === r.m) : k.has(r.wk);
+    if (d === 'user') return isStock || k.has(r.u);
+  }
+  return true;
+}
+const O1 = src => ORDERS.filter(r => pass1(r, src));
+const S1 = src => STOCK.filter(r => pass1(r, src, true));
+const ownSel = src => (sel1 && sel1.src === src ? sel1.keys : null);
+
+function setKpi(id, value, delta, sparkVals) {
+  const el = document.getElementById(id);
+  el.querySelector('.value').textContent = value;
+  if (delta) {
+    const d = el.querySelector('.d');
+    d.textContent = delta.text; d.className = 'd' + (delta.sign > 0 ? ' up' : delta.sign < 0 ? ' down' : '');
+  }
+  if (sparkVals) spark(el.querySelector('.spark'), sparkVals);
+}
+function momDelta(series, asPoints) {
+  if (series.length < 2) return { text: 'No prior month in context', sign: 0 };
+  const a = series.at(-2), b = series.at(-1);
+  if (asPoints) { const p = b - a; return { text: `${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)} pts vs prev month`, sign: Math.sign(p) }; }
+  const g = a ? (b - a) / a * 100 : 0;
+  return { text: `${g >= 0 ? '▲' : '▼'} ${Math.abs(g).toFixed(1)}% vs prev month`, sign: Math.sign(g) };
+}
+
+function select1(src, dim) {
+  return {
+    select: (k, add) => { sel1 = toggleSel(sel1, src, dim, k, add); renderP1(); },
+    clear: () => { if (sel1) { sel1 = null; renderP1(); } },
+  };
+}
+
+function renderP1() {
+  // ---- KPIs
+  const o = O1('kpi');
+  const byM = [...new Set(o.map(r => r.m))].sort((a, b) => a - b);
+  const mRev = byM.map(m => sum(o.filter(r => r.m === m), rev));
+  const mCogs = byM.map(m => sum(o.filter(r => r.m === m), cogs));
+  const mProf = mRev.map((v, i) => v - mCogs[i]);
+  const mMarg = mRev.map((v, i) => v ? mProf[i] / v * 100 : 0);
+  const R = sum(o, rev), Cg = sum(o, cogs);
+  setKpi('k-rev', money(R), momDelta(mRev), mRev);
+  setKpi('k-cogs', money(Cg), momDelta(mCogs), mCogs);
+  setKpi('k-profit', money(R - Cg), momDelta(mProf), mProf);
+  setKpi('k-margin', R ? ((R - Cg) / R * 100).toFixed(1) + ' %' : '—', momDelta(mMarg, true), mMarg);
+  const st = S1('kpi').filter(r => r.m < 3);
+  const stM = [...groupSum(st, r => r.m, stockCost).entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
+  setKpi('k-avg', stM.length ? money(stM.reduce((a, b) => a + b, 0) / stM.length) : '—', null, stM);
+
+  // ---- Monthly combo
+  {
+    const rows = O1('monthly');
+    const cats = MONTHS.filter(M => !F.month.size || F.month.has(M.key));
+    const r = groupSum(rows, x => x.m, rev), c = groupSum(rows, x => x.m, cogs);
+    const R_ = cats.map(M => r.get(M.key) || 0), C_ = cats.map(M => c.get(M.key) || 0), P_ = R_.map((v, i) => v - C_[i]);
+    const host = document.getElementById('v-monthly');
+    xyChart(host, {
+      cats, fmt: money, axisFmt: moneyAxis, selected: ownSel('monthly'),
+      bars: [{ name: 'Revenue', vals: R_, color: C.f2 }, { name: 'Cost', vals: C_, color: C.f1 }],
+      lines: [{ name: 'Profit', vals: P_, color: C.ink }],
+    });
+    host._ix = {
+      ...select1('monthly', 'month'),
+      tip: k => { const i = cats.findIndex(M => M.key === k); return tipHTML(MONTHS[k].label, [
+        ['Revenue', money(R_[i]), C.f2], ['Cost of meals sold', money(C_[i]), C.f1], ['Profit', money(P_[i]), C.ink],
+        ['Margin', R_[i] ? (P_[i] / R_[i] * 100).toFixed(1) + '%' : '—'],
+        ['Orders', int(new Set(rows.filter(x => x.m === k).map(x => x.o)).size)],
+      ], 'Click to filter page · Ctrl+click to add'); },
+    };
+  }
+
+  // ---- Top 5 meals by stock cost
+  {
+    const g = groupSum(S1('top5'), r => r.meal, stockCost);
+    const top = [...g.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const host = document.getElementById('v-top5');
+    hbarChart(host, {
+      cats: top.map(([k]) => ({ key: k, label: `${MEALS[k].label} · ${EATERIES[MEALS[k].e].label.slice(-1)}` })),
+      bars: [{ vals: top.map(t => t[1]), color: C.f2 }], fmt: money, selected: ownSel('top5'),
+    });
+    const stQ = groupSum(S1('top5'), r => r.meal, r => r.q);
+    host._ix = {
+      ...select1('top5', 'meal'),
+      tip: k => tipHTML(`${MEALS[k].label} (${EATERIES[MEALS[k].e].label})`, [
+        ['Stock cost', money(g.get(k)), C.f2], ['Stocked qty', int(stQ.get(k))],
+        ['Meal cost', '$' + MEALS[k].cost.toFixed(2)], ['Meal price', '$' + MEALS[k].price.toFixed(2)],
+      ], 'Click to filter page by this meal'),
+    };
+  }
+
+  // ---- Weekly revenue
+  {
+    const rows = O1('weekly');
+    const g = groupSum(rows, r => r.wk, rev);
+    const keys = [...g.keys()].sort((a, b) => a - b);
+    const single = new Set(keys.map(k => Math.floor(k / 4))).size === 1;
+    const cats = keys.map(k => ({ key: k, label: '', tick: single ? 'Wk ' + (k % 4 + 1) : (k % 4 === 0 ? MONTHS[k / 4].label : '') }));
+    const host = document.getElementById('v-weekly');
+    xyChart(host, { cats, fmt: money, axisFmt: moneyAxis, selected: ownSel('weekly'),
+      bars: [{ name: 'Revenue', vals: keys.map(k => g.get(k)), color: C.f2 }] });
+    host._ix = {
+      ...select1('weekly', 'week'),
+      tip: k => tipHTML(DIM_LABEL.week(k), [
+        ['Revenue', money(g.get(k)), C.f2],
+        ['Orders', int(new Set(rows.filter(r => r.wk === k).map(r => r.o)).size)],
+        ['Active users', int(new Set(rows.filter(r => r.wk === k).map(r => r.u)).size)],
+      ], 'Click to filter page by this week'),
+    };
+  }
+
+  // ---- Revenue vs cost by eatery
+  {
+    const rows = O1('eatery');
+    const r = groupSum(rows, x => x.e, rev), c = groupSum(rows, x => x.e, cogs);
+    const keys = [...r.keys()].sort((a, b) => r.get(b) - r.get(a));
+    const host = document.getElementById('v-eatery');
+    hbarChart(host, {
+      cats: keys.map(k => EATERIES[k]), fmt: money, selected: ownSel('eatery'),
+      bars: [{ vals: keys.map(k => r.get(k)), color: C.f2 }, { vals: keys.map(k => c.get(k)), color: C.f1 }],
+    });
+    host._ix = {
+      ...select1('eatery', 'eatery'),
+      tip: k => tipHTML(EATERIES[k].label, [
+        ['Revenue', money(r.get(k)), C.f2], ['Cost of meals sold', money(c.get(k)), C.f1],
+        ['Profit', money(r.get(k) - c.get(k)), C.ink], ['Margin', ((1 - c.get(k) / r.get(k)) * 100).toFixed(1) + '%'],
+        ['Meals on menu', MEALS.filter(m => m.e === k).length],
+      ], 'Click to filter page by this eatery'),
+    };
+  }
+
+  // ---- Top customers table
+  {
+    const rows = O1('cust');
+    const r = groupSum(rows, x => x.u, rev);
+    const top = [...r.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const max = top.length ? top[0][1] : 1, sel = ownSel('cust');
+    const ord = k => new Set(rows.filter(x => x.u === k).map(x => x.o)).size;
+    const host = document.getElementById('v-cust');
+    host.innerHTML = top.length ? `<table class="tbl"><thead><tr><th>User ID</th><th>Registered</th><th class="r">Orders</th><th class="r">Revenue</th><th style="width:34%"></th></tr></thead><tbody>` +
+      top.map(([k, v]) => `<tr class="${catCls(k, sel)}" data-key="${k}"><td>${k}</td><td>${MONTHS[REG[k]].label}</td><td class="r">${ord(k)}</td><td class="r">${money(v)}</td>` +
+        `<td><span class="bar m" style="width:${(v / max * 100).toFixed(0)}%"></span></td></tr>`).join('') + '</tbody></table>'
+      : '<p style="color:var(--muted)">No data for current filters</p>';
+    host._ix = {
+      ...select1('cust', 'user'),
+      tip: k => {
+        const ur = rows.filter(x => x.u === k), fav = [...groupSum(ur, x => x.e, rev).entries()].sort((a, b) => b[1] - a[1])[0];
+        return tipHTML('User ' + k, [
+          ['Revenue', money(r.get(k))], ['Profit', money(r.get(k) - sum(ur, cogs))], ['Orders', ord(k)],
+          ['Registered', MONTHS[REG[k]].label], ['Top eatery', fav ? EATERIES[fav[0]].label : '—'],
+        ], 'Click to filter page by this customer');
+      },
+    };
+  }
+
+  updatePill('pill1', sel1);
+  slicers.forEach(s => s.paint());
+}
+
+/* =================================================================
+   6. PAGE 2 — USER BEHAVIOUR
+   Window metrics (LAG, running total) are computed over ALL months,
+   then the month filter only limits what is displayed.
+   ================================================================= */
+let sel2 = null;
+function userMonthly() {
+  const ok = u => !F.cohort.size || F.cohort.has(REG[u]);
+  const mau = MONTHS.map(() => new Set()), ord = MONTHS.map(() => new Set()), regs = MONTHS.map(() => 0);
+  REG.forEach((m, u) => { if (ok(u)) regs[m]++; });
+  ORDERS.forEach(r => { if (ok(r.u)) { mau[r.m].add(r.u); ord[r.m].add(r.o); } });
+  let rt = 0;
+  return MONTHS.map((M, i) => {
+    rt += regs[i];
+    const a = mau[i].size, last = i ? mau[i - 1].size : 0, o = ord[i].size, lastO = i ? ord[i - 1].size : 0;
+    return { key: i, label: M.label, regs: regs[i], rt, mau: a, last, delta: a - last,
+             growth: last ? (a - last) / last * 100 : null, orders: o, lastO, ogrowth: lastO ? (o - lastO) / lastO * 100 : null };
+  });
+}
+
+function renderP2() {
+  const all = userMonthly();
+  const rows = all.filter(r => !F.month.size || F.month.has(r.key));
+  const sel = sel2 ? sel2.keys : null;
+  const focusRows = sel ? rows.filter(r => sel.has(r.key)) : rows;
+  const f = focusRows.at(-1) || rows.at(-1);
+  const byKey = new Map(all.map(r => [r.key, r]));
+  const asOf = f ? 'as of ' + f.label : '';
+
+  if (f) {
+    setKpi('k-rt', int(f.rt), { text: asOf, sign: 0 }, rows.map(r => r.rt));
+    setKpi('k-regs', int(f.regs), { text: asOf, sign: 0 }, rows.map(r => r.regs));
+    setKpi('k-mau', int(f.mau), { text: `Δ ${signed(f.delta)} vs last month`, sign: Math.sign(f.delta) }, rows.map(r => r.mau));
+    setKpi('k-mg', pct(f.growth), { text: asOf, sign: Math.sign(f.growth || 0) }, rows.map(r => r.growth));
+    setKpi('k-og', pct(f.ogrowth), { text: `${int(f.orders)} orders · ${f.label}`, sign: Math.sign(f.ogrowth || 0) }, rows.map(r => r.ogrowth));
+  }
+
+  const tip = k => { const r = byKey.get(k); return tipHTML(r.label, [
+    ['New registrations', int(r.regs), C.f2], ['Registered (running total)', int(r.rt), C.ink],
+    ['MAU', int(r.mau), C.ink], ['Last month MAU', int(r.last), C.f3], ['MAU Δ', signed(r.delta)],
+    ['MAU growth', pct(r.growth)], ['Orders', int(r.orders)], ['Order growth', pct(r.ogrowth)],
+  ], 'Click to focus KPIs on this month · Ctrl+click to compare'); };
+  const ix = src => ({
+    tip,
+    select: (k, add) => { sel2 = toggleSel(sel2 && { ...sel2, src }, src, 'month', k, add); renderP2(); },
+    clear: () => { if (sel2) { sel2 = null; renderP2(); } },
+  });
+  const cats = rows.map(r => ({ key: r.key, label: r.label }));
+
+  let h = document.getElementById('v-regs');
+  xyChart(h, { cats, fmt: int, selected: sel,
+    bars: [{ vals: rows.map(r => r.regs), color: C.f2 }],
+    lines: [{ vals: rows.map(r => r.rt), color: C.ink, axis: 'y2' }] });
+  h._ix = ix('regs');
+
+  h = document.getElementById('v-mau');
+  xyChart(h, { cats, fmt: int, selected: sel,
+    lines: [{ vals: rows.map(r => r.last), color: C.f3, dash: '6 5' }, { vals: rows.map(r => r.mau), color: C.ink }] });
+  h._ix = ix('mau');
+
+  h = document.getElementById('v-delta');
+  xyChart(h, { cats, fmt: signed, selected: sel,
+    bars: [{ vals: rows.map(r => r.delta), colorFn: v => (v >= 0 ? C.dark : C.light) }] });
+  h._ix = ix('delta');
+
+  h = document.getElementById('v-growth');
+  xyChart(h, { cats, fmt: v => v.toFixed(0) + '%', selected: sel,
+    lines: [{ vals: rows.map(r => r.ogrowth), color: C.f3, dash: '6 5' }, { vals: rows.map(r => r.growth), color: C.ink }] });
+  h._ix = ix('growth');
+
+  h = document.getElementById('v-detail');
+  const cls = v => (v == null ? '' : v >= 0 ? 'pos' : 'neg');
+  h.innerHTML = `<table class="tbl"><thead><tr><th>Month</th><th class="r">MAU</th><th class="r">Last MAU</th><th class="r">Δ</th><th class="r">Growth</th><th class="r">Orders</th><th class="r">Order growth</th></tr></thead><tbody>` +
+    rows.map(r => `<tr class="${catCls(r.key, sel)}" data-key="${r.key}"><td>${r.label}</td><td class="r">${int(r.mau)}</td><td class="r">${int(r.last)}</td>` +
+      `<td class="r ${cls(r.delta)}">${signed(r.delta)}</td><td class="r ${cls(r.growth)}">${pct(r.growth)}</td>` +
+      `<td class="r">${int(r.orders)}</td><td class="r ${cls(r.ogrowth)}">${pct(r.ogrowth)}</td></tr>`).join('') + '</tbody></table>';
+  h._ix = ix('detail');
+
+  updatePill('pill2', sel2);
+  slicers.forEach(s => s.paint());
+}
+
+/* =================================================================
+   7. SHARED UI: selection pill, slicers, reset, pages, scaling
+   ================================================================= */
+function updatePill(id, sel) {
+  const p = document.getElementById(id);
+  p.classList.toggle('show', !!sel);
+  if (!sel) return;
+  const keys = [...sel.keys], name = { month: 'Month', week: 'Week', meal: 'Meal', eatery: 'Eatery', user: 'Customer' }[sel.dim];
+  p.querySelector('b').textContent = `${name} = ${keys.length === 1 ? DIM_LABEL[sel.dim](keys[0]) : keys.length + ' items'}`;
+}
+document.querySelector('#pill1 button').addEventListener('click', () => { sel1 = null; renderP1(); });
+document.querySelector('#pill2 button').addEventListener('click', () => { sel2 = null; renderP2(); });
+
+const rerender = () => (current === 'p1' ? renderP1() : renderP2());
+const monthOpts = () => MONTHS;
+makeSlicer(document.getElementById('s1-month'), { set: () => F.month, options: monthOpts, onChange: rerender });
+makeSlicer(document.getElementById('s1-eatery'), {
+  set: () => F.eatery, options: () => EATERIES,
+  onChange: () => {  // cascade: drop meal picks that no longer belong to a selected eatery
+    if (F.eatery.size) [...F.meal].forEach(k => !F.eatery.has(MEALS[k].e) && F.meal.delete(k));
+    rerender();
+  },
+});
+makeSlicer(document.getElementById('s1-meal'), {
+  set: () => F.meal,
+  options: () => MEALS.filter(m => !F.eatery.size || F.eatery.has(m.e)).map(m => ({ key: m.key, label: `${m.label} (${EATERIES[m.e].label})` })),
+  onChange: rerender,
+});
+makeSlicer(document.getElementById('s2-month'), { set: () => F.month, options: monthOpts, onChange: rerender });
+makeSlicer(document.getElementById('s2-cohort'), {
+  set: () => F.cohort, options: () => MONTHS.map(M => ({ key: M.key, label: 'Cohort ' + M.label })), onChange: rerender,
+});
+
+document.querySelectorAll('[data-reset]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.reset === 'p1') { F.month.clear(); F.eatery.clear(); F.meal.clear(); sel1 = null; }
+  else { F.month.clear(); F.cohort.clear(); sel2 = null; }
+  rerender();
+}));
+
+const pages = document.querySelectorAll('.page'), stage = document.getElementById('stage');
+let current = 'p1';
+function go(id) {
+  current = id;
+  pages.forEach(p => p.classList.toggle('active', p.id === id));
+  document.querySelectorAll('.toolbar [data-go]').forEach(b => b.setAttribute('aria-pressed', b.dataset.go === id));
+  slicers.forEach(s => s.close()); hideTip();
+  rerender();
+}
+document.querySelectorAll('[data-go]').forEach(b => b.addEventListener('click', () => go(b.dataset.go)));
+
+function fit() {
+  const s = Math.min((stage.clientWidth - 32) / 1920, (stage.clientHeight - 32) / 1080);
+  const x = (stage.clientWidth - 1920 * s) / 2, y = (stage.clientHeight - 1080 * s) / 2;
+  pages.forEach(p => (p.style.transform = `translate(${x}px, ${y}px) scale(${s})`));
+}
+window.addEventListener('resize', fit);
+
+const tn = document.getElementById('toggleNotes');
+tn.addEventListener('click', () => tn.setAttribute('aria-pressed', !document.body.classList.toggle('hide-notes')));
+
+fit();
+go('p1');
+</script>
+</body>
+</html>
