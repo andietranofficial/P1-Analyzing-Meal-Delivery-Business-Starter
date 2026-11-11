@@ -5,7 +5,7 @@
 You are a data analyst at **Velofeast**, a food-delivery startup. In this project you build a small PostgreSQL data warehouse in the cloud, answer business questions with SQL, and present the results in a Power BI dashboard.
 
 ```
-CSV files  ──►  PostgreSQL on Neon (schema: delivery)  ──►  SQL analysis  ──►  reporting views  ──►  Power BI dashboard
+CSV files  ──►  PostgreSQL or Azure SQL DB (schema: delivery)  ──►  SQL analysis  ──►  reporting views  ──►  Power BI dashboard
 ```
 
 ## Business questions
