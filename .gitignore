@@ -15,10 +15,10 @@ Thumbs.db
 
 # Folders: ignore contents but keep the (empty) folder via .gitkeep
 Admin_SQL/*
-!Admin_SQL/.gitkeep
+#!Admin_SQL/.gitkeep
 Analysis_SQL/*
 !Analysis_SQL/.gitkeep
-Dashboards/*
+
 !Dashboards/.gitkeep
 ## Data: download the CSVs yourself (see Datasets/README.md)
 Datasets/*
